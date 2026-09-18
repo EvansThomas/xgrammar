@@ -17,6 +17,16 @@ namespace xgrammar {
 
 namespace {
 
+bool IsIdentifier(const std::string& text) {
+  if (text.empty() || (text[0] >= '0' && text[0] <= '9')) {
+    return false;
+  }
+  return std::all_of(text.begin(), text.end(), [](unsigned char character) {
+    return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+           (character >= '0' && character <= '9') || character == '_';
+  });
+}
+
 // Identifier characters, minus the ones a child branch of the key trie already consumes. The
 // first character of a key cannot be a digit, so the caller decides whether digits are allowed.
 template <typename Children>
@@ -123,6 +133,7 @@ int32_t GemmaToolCallingConverter::GenerateObject(
 int32_t GemmaToolCallingConverter::FormatPropertyKey(
     const std::string& key, const SchemaSpecPtr& schema
 ) {
+  XGRAMMAR_CHECK(IsIdentifier(key)) << "A gemma property key must be an identifier: " << key;
   return ByteString(key);
 }
 

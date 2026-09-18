@@ -4134,6 +4134,12 @@ def test_gemma_property_names_rejected():
         _json_schema_to_ebnf(schema, json_format="gemma")
 
 
+def test_gemma_non_identifier_property_key_rejected():
+    schema = {"type": "object", "properties": {"my key": {"type": "integer"}}}
+    with pytest.raises(RuntimeError, match="must be an identifier"):
+        _json_schema_to_ebnf(schema, json_format="gemma")
+
+
 def test_gemma_const_string_containing_delimiter_rejected():
     schema = {"type": "object", "properties": {"k": {"const": '<|"|>'}}, "required": ["k"]}
     with pytest.raises(RuntimeError, match="cannot contain the string delimiter"):
