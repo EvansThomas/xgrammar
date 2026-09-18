@@ -3967,10 +3967,10 @@ def test_gemma_format_string(input_str: str, accepted: bool):
 
 
 gemma_scalar_properties_input_str_accepted = (
-    ("{n:1,f:2.5,b:true,z:null}", True),
-    ("{n:-3,f:1e5,b:false,z:null}", True),
-    ("{n:1.5,f:2.5,b:true,z:null}", False),
-    ('{n:1,f:2.5,b:<|"|>true<|"|>,z:null}', False),
+    ("{b:true,f:2.5,n:1,z:null}", True),
+    ("{b:false,f:1e5,n:-3,z:null}", True),
+    ("{b:true,f:2.5,n:1.5,z:null}", False),
+    ('{b:<|"|>true<|"|>,f:2.5,n:1,z:null}', False),
 )
 
 
@@ -3990,12 +3990,12 @@ def test_gemma_scalar_properties(input_str: str, accepted: bool):
 
 
 gemma_nested_properties_input_str_accepted = (
-    ('{o:{k:<|"|>v<|"|>},a:[<|"|>x<|"|>,<|"|>y<|"|>],objs:[{id:1},{id:2}]}', True),
-    ('{o:{k:<|"|>v<|"|>},a:[],objs:[]}', True),
+    ('{a:[<|"|>x<|"|>,<|"|>y<|"|>],o:{k:<|"|>v<|"|>},objs:[{id:1},{id:2}]}', True),
+    ('{a:[],o:{k:<|"|>v<|"|>},objs:[]}', True),
     # Bare keys and delimited strings apply at every nesting level.
-    ('{o:{"k":<|"|>v<|"|>},a:[],objs:[]}', False),
-    ('{o:{k:"v"},a:[],objs:[]}', False),
-    ('{o:{k:<|"|>v<|"|>},a:[<|"|>x<|"|>],objs:[{id:<|"|>1<|"|>}]}', False),
+    ('{a:[],o:{"k":<|"|>v<|"|>},objs:[]}', False),
+    ('{a:[],o:{k:"v"},objs:[]}', False),
+    ('{a:[<|"|>x<|"|>],o:{k:<|"|>v<|"|>},objs:[{id:<|"|>1<|"|>}]}', False),
 )
 
 
@@ -4050,6 +4050,91 @@ def test_gemma_property_order():
     )
 
 
+gemma_dictsort_schema = {
+    "type": "object",
+    "properties": {
+        "zeta": {"type": "string"},
+        "mid": {"type": "integer"},
+        "alpha": {"type": "string"},
+    },
+    "required": ["zeta", "mid", "alpha"],
+}
+
+gemma_dictsort_input_str_accepted = (
+    ('{alpha:<|"|>b<|"|>,mid:3,zeta:<|"|>s<|"|>}', True),
+    ('{zeta:<|"|>s<|"|>,mid:3,alpha:<|"|>b<|"|>}', False),
+    ('{alpha:<|"|>b<|"|>,zeta:<|"|>s<|"|>}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_dictsort_input_str_accepted)
+def test_gemma_dictsort_property_order(input_str: str, accepted: bool):
+    # The chat template renders the arguments with dictsort, so the model emits the declared
+    # properties key-sorted rather than in declaration order.
+    _check_gemma_grammar(gemma_dictsort_schema, input_str, accepted)
+
+
+gemma_dictsort_optional_schema = {
+    "type": "object",
+    "properties": {
+        "zeta": {"type": "string"},
+        "beta": {"type": "integer"},
+        "alpha": {"type": "string"},
+    },
+    "required": ["zeta", "alpha"],
+}
+
+gemma_dictsort_optional_input_str_accepted = (
+    ('{alpha:<|"|>b<|"|>,zeta:<|"|>s<|"|>}', True),
+    ('{alpha:<|"|>b<|"|>,beta:1,zeta:<|"|>s<|"|>}', True),
+    ('{beta:1,alpha:<|"|>b<|"|>,zeta:<|"|>s<|"|>}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_dictsort_optional_input_str_accepted)
+def test_gemma_dictsort_optional_property_order(input_str: str, accepted: bool):
+    _check_gemma_grammar(gemma_dictsort_optional_schema, input_str, accepted)
+
+
+gemma_dictsort_mixed_case_input_str_accepted = (
+    ("{alpha:1,Beta:2}", True),
+    ("{Beta:2,alpha:1}", False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_dictsort_mixed_case_input_str_accepted)
+def test_gemma_dictsort_mixed_case(input_str: str, accepted: bool):
+    # dictsort compares lowercased keys, so "alpha" precedes "Beta" despite the byte order.
+    schema = {
+        "type": "object",
+        "properties": {"Beta": {"type": "integer"}, "alpha": {"type": "integer"}},
+        "required": ["Beta", "alpha"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
+gemma_dictsort_nested_input_str_accepted = (
+    ("{outer:{a:1,z:2}}", True),
+    ("{outer:{z:2,a:1}}", False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_dictsort_nested_input_str_accepted)
+def test_gemma_dictsort_nested_object(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {
+            "outer": {
+                "type": "object",
+                "properties": {"z": {"type": "integer"}, "a": {"type": "integer"}},
+                "required": ["z", "a"],
+            }
+        },
+        "required": ["outer"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
 gemma_empty_object_input_str_accepted = (("{}", True), ("{ }", True), ("{a:1}", False))
 
 
@@ -4099,14 +4184,14 @@ def test_gemma_render_speech(input_str: str, accepted: bool):
 
 
 gemma_literal_input_str_accepted = (
-    ('{mode:<|"|>fast<|"|>,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', True),
-    ('{mode:3,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', True),
-    ('{mode:null,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', True),
-    ('{mode:"fast",k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
-    ('{mode:<|"|>medium<|"|>,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
-    ('{mode:<|"|>fast<|"|>,k:<|"|>w<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
+    ('{k:<|"|>v<|"|>,mode:<|"|>fast<|"|>,o:{s:<|"|>t<|"|>,x:1}}', True),
+    ('{k:<|"|>v<|"|>,mode:3,o:{s:<|"|>t<|"|>,x:1}}', True),
+    ('{k:<|"|>v<|"|>,mode:null,o:{s:<|"|>t<|"|>,x:1}}', True),
+    ('{k:<|"|>v<|"|>,mode:"fast",o:{s:<|"|>t<|"|>,x:1}}', False),
+    ('{k:<|"|>v<|"|>,mode:<|"|>medium<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
+    ('{k:<|"|>w<|"|>,mode:<|"|>fast<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
     # The chat template renders mappings with dictsort, so an object literal is key-sorted.
-    ('{mode:<|"|>fast<|"|>,k:<|"|>v<|"|>,o:{x:1,s:<|"|>t<|"|>}}', False),
+    ('{k:<|"|>v<|"|>,mode:<|"|>fast<|"|>,o:{x:1,s:<|"|>t<|"|>}}', False),
 )
 
 

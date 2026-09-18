@@ -140,7 +140,17 @@ int32_t GemmaToolCallingConverter::GenerateObject(
   XGRAMMAR_CHECK(spec.pattern_properties.empty())
       << "gemma style does not support patternProperties";
   XGRAMMAR_CHECK(spec.property_names == nullptr) << "gemma style does not support propertyNames";
-  return JSONSchemaConverter::GenerateObject(spec, rule_name, need_brace);
+  // The chat template renders the arguments with dictsort, so the model emits the declared
+  // properties key-sorted rather than in declaration order.
+  ObjectSpec sorted_spec = spec;
+  std::stable_sort(
+      sorted_spec.properties.begin(),
+      sorted_spec.properties.end(),
+      [](const ObjectSpec::Property& lhs, const ObjectSpec::Property& rhs) {
+        return ToLowerASCII(lhs.name) < ToLowerASCII(rhs.name);
+      }
+  );
+  return JSONSchemaConverter::GenerateObject(sorted_spec, rule_name, need_brace);
 }
 
 int32_t GemmaToolCallingConverter::FormatPropertyKey(

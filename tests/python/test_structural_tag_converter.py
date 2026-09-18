@@ -1111,13 +1111,13 @@ def test_json_schema_style_kimi_k3_xml_const_enum_and_nullable_values():
 # Gemma 4 renders tool-call arguments as a JSON-shaped object with bare keys, and delimits
 # strings with <|"|> instead of quotes, so string bodies carry no escapes.
 gemma_instance_is_accepted = [
-    ('{name:<|"|>Bob<|"|>,age:100}', True),
+    ('{age:100,name:<|"|>Bob<|"|>}', True),
     # Whitespace around keys, colons and commas is tolerated.
-    ('{ name : <|"|>Bob<|"|> , age : 100 }', True),
+    ('{ age : 100 , name : <|"|>Bob<|"|> }', True),
     # Plain JSON is not accepted: keys are bare and strings use the delimiters.
-    ('{"name":"Bob","age":100}', False),
-    # Properties must follow the schema's declared order.
-    ('{age:100,name:<|"|>Bob<|"|>}', False),
+    ('{"age":100,"name":"Bob"}', False),
+    # Properties must follow the order the chat template's dictsort renders them in.
+    ('{name:<|"|>Bob<|"|>,age:100}', False),
     # Missing required property.
     ('{name:<|"|>Bob<|"|>}', False),
 ]
