@@ -39,7 +39,7 @@ from xgrammar.structural_tag import (
     StructuralTag,
     TagFormat,
 )
-from xgrammar.testing import _is_grammar_accept_string
+from xgrammar.testing import _get_masked_tokens_from_bitmask, _is_grammar_accept_string
 
 
 def _input_dict_to_get_stag_kwargs(format_type: str, input_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -188,13 +188,6 @@ def _collect_json_schema_nodes(structural_tag: StructuralTag) -> List[JSONSchema
     ]
 
 
-def _bitmask_allows(bitmask: Any, token_id: int) -> bool:
-    """Return whether the token is allowed by a bitmask from fill_next_token_bitmask."""
-
-    word = int(bitmask[0][token_id // 32].item())
-    return (word >> (token_id % 32)) & 1 == 1
-
-
 # ---------- Shared tool definitions ----------
 
 SIMPLE_SCHEMA = {"type": "object", "properties": {"q": {"type": "string"}}}
@@ -286,6 +279,7 @@ def test_reasoning_boolean_aliases(boolean_value: bool, mode: Literal["enabled",
         "minimax",
         "minimax_m3",
         "glm_4_7",
+        "gemma_4",
         "deepseek_v4",
         "deepseek_v4_1",
         "cohere",
@@ -1556,9 +1550,7 @@ def test_gemma_4_single_token_delimiter_walk():
         "Seoul",
         "<eos>",
     ]
-    tokenizer_info = xgr.TokenizerInfo(
-        vocab, xgr.VocabType.RAW, stop_token_ids=[vocab.index("<eos>")]
-    )
+    tokenizer_info = xgr.TokenizerInfo(vocab, stop_token_ids=[vocab.index("<eos>")])
     tools = make_tools(
         ["get_weather"],
         {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
@@ -1574,17 +1566,19 @@ def test_gemma_4_single_token_delimiter_walk():
         for piece in pieces:
             matcher.fill_next_token_bitmask(bitmask)
             token_id = vocab.index(piece)
-            assert _bitmask_allows(bitmask, token_id), f"bitmask disallows {piece!r}"
+            rejected = _get_masked_tokens_from_bitmask(bitmask, len(vocab))
+            assert token_id not in rejected, f"bitmask rejects {piece!r}"
             assert matcher.accept_token(token_id), f"matcher rejected {piece!r}"
 
     walk("<|tool_call>", "call", ":", "get_weather", "{", "ci")
-    # The key is still open, so the string delimiter is not a legal continuation here.
+    # Mid-key only the rest of the key may follow: neither the delimiter that would open
+    # a string value nor the colon that would close the key is legal yet.
     matcher.fill_next_token_bitmask(bitmask)
-    assert not _bitmask_allows(bitmask, vocab.index('<|"|>'))
+    rejected = _get_masked_tokens_from_bitmask(bitmask, len(vocab))
+    assert set(range(len(vocab))) - set(rejected) == {vocab.index("ty")}
 
-    walk("ty", ":", '<|"|>', "Seoul", '<|"|>', "}", "<tool_call|>")
-    matcher.fill_next_token_bitmask(bitmask)
-    assert _bitmask_allows(bitmask, vocab.index("<eos>"))
+    walk("ty", ":", '<|"|>', "Seoul", '<|"|>', "}", "<tool_call|>", "<eos>")
+    assert matcher.is_terminated()
 
 
 # ---------- Test: exclude_special_tokens ----------
