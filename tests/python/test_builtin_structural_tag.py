@@ -188,6 +188,13 @@ def _collect_json_schema_nodes(structural_tag: StructuralTag) -> List[JSONSchema
     ]
 
 
+def _bitmask_allows(bitmask: Any, token_id: int) -> bool:
+    """Return whether the token is allowed by a bitmask from fill_next_token_bitmask."""
+
+    word = int(bitmask[0][token_id // 32].item())
+    return (word >> (token_id % 32)) & 1 == 1
+
+
 # ---------- Shared tool definitions ----------
 
 SIMPLE_SCHEMA = {"type": "object", "properties": {"q": {"type": "string"}}}
@@ -1452,6 +1459,134 @@ def test_specific_functions_cases(structural_tag_fn, case: Dict[str, Any]):
     assert None not in _collect_json_schema_values(structural_tag)
 
 
+# ---------- Test: gemma_4 ----------
+
+_GEMMA_4_SCHEMA = {
+    "type": "object",
+    "properties": {"location": {"type": "string"}},
+    "required": ["location"],
+}
+_tools_gemma_4 = make_tools(["get_weather"], _GEMMA_4_SCHEMA)
+_tools_gemma_4_pair = make_tools(["get_weather", "get_time"], _GEMMA_4_SCHEMA)
+
+_GEMMA_4_WEATHER_CALL = '<|tool_call>call:get_weather{location:<|"|>Beijing<|"|>}<tool_call|>'
+_GEMMA_4_TIME_CALL = '<|tool_call>call:get_time{location:<|"|>Beijing<|"|>}<tool_call|>'
+
+_gemma_4_auto_instances = [
+    pytest.param("Sure, one moment.", True, id="plain-text"),
+    pytest.param(_GEMMA_4_WEATHER_CALL, True, id="single-call"),
+    pytest.param("Let me check. " + _GEMMA_4_WEATHER_CALL, True, id="text-then-call"),
+    # Gemma 4 delimits strings with <|"|> and leaves keys bare; the JSON form is not its syntax.
+    pytest.param(
+        '<|tool_call>call:get_weather{"location":"Beijing"}<tool_call|>', False, id="json-quoted"
+    ),
+    pytest.param(
+        '<|tool_call>call:get_altitude{location:<|"|>Beijing<|"|>}<tool_call|>',
+        False,
+        id="unknown-tool",
+    ),
+]
+
+
+@pytest.mark.parametrize("instance, is_accepted", _gemma_4_auto_instances)
+def test_gemma_4_auto_instances(instance: str, is_accepted: bool):
+    """gemma_4 auto mode: free text that may dispatch into <|tool_call> blocks."""
+
+    structural_tag = get_model_structural_tag(
+        "gemma_4", tools=_tools_gemma_4, tool_choice="auto", reasoning="disabled"
+    )
+    check_stag_with_instance(structural_tag, instance, is_accepted)
+
+
+def test_gemma_4_required_tool_choice():
+    """required forces at least one call and still admits parallel calls."""
+
+    structural_tag = get_model_structural_tag(
+        "gemma_4", tools=_tools_gemma_4_pair, tool_choice="required", reasoning="disabled"
+    )
+    check_stag_with_instance(structural_tag, _GEMMA_4_WEATHER_CALL, True)
+    check_stag_with_instance(structural_tag, "Sure, one moment.", False)
+    check_stag_with_instance(structural_tag, _GEMMA_4_WEATHER_CALL + _GEMMA_4_TIME_CALL, True)
+
+
+def test_gemma_4_forced_tool_choice_pins_the_named_tool():
+    """forced admits only the resolved tool."""
+
+    structural_tag = get_model_structural_tag(
+        "gemma_4",
+        tools=_tools_gemma_4_pair,
+        tool_choice={"type": "function", "function": {"name": "get_weather"}},
+        reasoning="disabled",
+    )
+    check_stag_with_instance(structural_tag, _GEMMA_4_WEATHER_CALL, True)
+    check_stag_with_instance(structural_tag, _GEMMA_4_TIME_CALL, False)
+
+
+def test_gemma_4_reasoning_channel_blocks_tool_calls():
+    """The thought channel is free text, so a tool call may only start after it closes."""
+
+    structural_tag = get_model_structural_tag("gemma_4", tools=_tools_gemma_4, reasoning="enabled")
+    check_stag_with_instance(
+        structural_tag, "<|channel>thought\nhmm<channel|>" + _GEMMA_4_WEATHER_CALL, True
+    )
+    check_stag_with_instance(
+        structural_tag, "<|channel>thought\nhmm <|tool_call> now<channel|>done", False
+    )
+
+
+def test_gemma_4_single_token_delimiter_walk():
+    """Gemma 4's markers are single vocabulary entries in the real tokenizer.
+
+    Walk a whole tool call token by token against a vocabulary where <|tool_call> and
+    <|"|> are one token each, so the grammar is exercised through token matching rather
+    than the byte-level string checks above.
+    """
+
+    vocab = [
+        "<|tool_call>",
+        "<tool_call|>",
+        '<|"|>',
+        "call",
+        ":",
+        "get_weather",
+        "{",
+        "}",
+        "ci",
+        "ty",
+        "Seoul",
+        "<eos>",
+    ]
+    tokenizer_info = xgr.TokenizerInfo(
+        vocab, xgr.VocabType.RAW, stop_token_ids=[vocab.index("<eos>")]
+    )
+    tools = make_tools(
+        ["get_weather"],
+        {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+    )
+    structural_tag = get_model_structural_tag(
+        "gemma_4", tools=tools, tool_choice="required", reasoning="disabled"
+    )
+    compiler = xgr.GrammarCompiler(tokenizer_info, cache_enabled=False)
+    matcher = xgr.GrammarMatcher(compiler.compile_structural_tag(structural_tag))
+    bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
+
+    def walk(*pieces: str) -> None:
+        for piece in pieces:
+            matcher.fill_next_token_bitmask(bitmask)
+            token_id = vocab.index(piece)
+            assert _bitmask_allows(bitmask, token_id), f"bitmask disallows {piece!r}"
+            assert matcher.accept_token(token_id), f"matcher rejected {piece!r}"
+
+    walk("<|tool_call>", "call", ":", "get_weather", "{", "ci")
+    # The key is still open, so the string delimiter is not a legal continuation here.
+    matcher.fill_next_token_bitmask(bitmask)
+    assert not _bitmask_allows(bitmask, vocab.index('<|"|>'))
+
+    walk("ty", ":", '<|"|>', "Seoul", '<|"|>', "}", "<tool_call|>")
+    matcher.fill_next_token_bitmask(bitmask)
+    assert _bitmask_allows(bitmask, vocab.index("<eos>"))
+
+
 # ---------- Test: exclude_special_tokens ----------
 
 # Model keys whose built-in structural tags forbid special tokens (e.g. <think>)
@@ -2351,6 +2486,12 @@ _REQUIRED_TERMINATION_CASES = [
         '<tool_call>{"name": "get_weather", "arguments": {"location": "Beijing"}}</tool_call>',
         '<tool_call>{"name": "get_weather", "arguments": {"location": "Beijing"}}</tool_call>'
         '<tool_call>{"name": "get_time", "arguments": {"timezone": "UTC"}}</tool_call>',
+    ),
+    (
+        "gemma_4",
+        '<|tool_call>call:get_weather{location:<|"|>Beijing<|"|>}<tool_call|>',
+        '<|tool_call>call:get_weather{location:<|"|>Beijing<|"|>}<tool_call|>'
+        '<|tool_call>call:get_time{timezone:<|"|>UTC<|"|>}<tool_call|>',
     ),
 ]
 
