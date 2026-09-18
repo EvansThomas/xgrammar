@@ -83,8 +83,13 @@ GemmaToolCallingConverter::GemmaToolCallingConverter(
 void GemmaToolCallingConverter::AddBasicRules() {
   JSONSchemaConverter::AddBasicRules({kGemmaStringContent, kGemmaVariableName});
 
+  // A tool-call marker inside a string desyncs every downstream parser, and the chat template
+  // escapes nothing, so such a string cannot be produced in the first place.
   builder_.UpdateRuleBody(
-      kGemmaStringContent, TagDispatch(/*loop_after_dispatch=*/false, {kGemmaStringDelim})
+      kGemmaStringContent,
+      TagDispatch(
+          /*loop_after_dispatch=*/false, {kGemmaStringDelim, "<|tool_call>", "<tool_call|>"}
+      )
   );
   builder_.UpdateRuleBody(
       kGemmaVariableName,

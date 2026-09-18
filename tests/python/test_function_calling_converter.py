@@ -3910,6 +3910,22 @@ def test_gemma_string_property(input_str: str, accepted: bool):
     _check_gemma_grammar(schema, input_str, accepted)
 
 
+gemma_tool_call_marker_string_input_str_accepted = (
+    ('{q:<|"|>a<tool_call b<|"|>}', True),
+    ('{q:<|"|>a<|tool b<|"|>}', True),
+    ('{q:<|"|>a<tool_call|>b<|"|>}', False),
+    ('{q:<|"|>a<|tool_call>b<|"|>}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_tool_call_marker_string_input_str_accepted)
+def test_gemma_string_excludes_tool_call_markers(input_str: str, accepted: bool):
+    # A tool-call marker inside a string desyncs downstream parsers, and the chat template
+    # escapes nothing, so such a string cannot be produced in the first place.
+    schema = {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
 gemma_bounded_string_input_str_accepted = (
     ('{q:<|"|>ab<|"|>}', True),
     ('{q:<|"|>abc<|"|>}', True),
