@@ -15,6 +15,18 @@
 
 namespace xgrammar {
 
+namespace {
+
+std::string ToLowerASCII(const std::string& text) {
+  std::string lowered = text;
+  std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char byte) {
+    return static_cast<char>(byte >= 'A' && byte <= 'Z' ? byte - 'A' + 'a' : byte);
+  });
+  return lowered;
+}
+
+}  // namespace
+
 const std::string GemmaToolCallingConverter::kGemmaStringDelim = "<|\"|>";
 const std::string GemmaToolCallingConverter::kGemmaStringContent = "gemma_string_content";
 const std::string GemmaToolCallingConverter::kGemmaVariableName = "gemma_variable_name";
@@ -88,9 +100,12 @@ int32_t GemmaToolCallingConverter::GenerateLiteral(const picojson::value& value)
   }
   if (value.is<picojson::object>()) {
     const auto& object = value.get<picojson::object>();
-    // The chat template renders mappings with dictsort, so literal keys are sorted.
+    // The chat template renders mappings with dictsort, whose default is case-insensitive:
+    // it compares lowercased keys and keeps insertion order for the ones that tie.
     std::vector<std::string> keys = object.ordered_keys();
-    std::sort(keys.begin(), keys.end());
+    std::stable_sort(keys.begin(), keys.end(), [](const std::string& lhs, const std::string& rhs) {
+      return ToLowerASCII(lhs) < ToLowerASCII(rhs);
+    });
     std::vector<int32_t> elements;
     elements.push_back(ByteString("{"));
     for (size_t index = 0; index < keys.size(); ++index) {

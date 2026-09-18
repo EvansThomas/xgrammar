@@ -4063,5 +4063,21 @@ def test_gemma_const_and_enum(input_str: str, accepted: bool):
     _check_gemma_grammar(schema, input_str, accepted)
 
 
+gemma_literal_key_order_input_str_accepted = (("{o:{a:2,B:1}}", True), ("{o:{B:1,a:2}}", False))
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_literal_key_order_input_str_accepted)
+def test_gemma_const_key_order(input_str: str, accepted: bool):
+    # dictsort compares lowercased keys, so "a" precedes "B" despite the byte order.
+    schema = {"type": "object", "properties": {"o": {"const": {"B": 1, "a": 2}}}, "required": ["o"]}
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
+def test_gemma_const_string_containing_delimiter_rejected():
+    schema = {"type": "object", "properties": {"k": {"const": '<|"|>'}}, "required": ["k"]}
+    with pytest.raises(RuntimeError, match="cannot contain the string delimiter"):
+        _json_schema_to_ebnf(schema, json_format="gemma")
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)
