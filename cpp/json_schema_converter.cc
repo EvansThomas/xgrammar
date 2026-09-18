@@ -4584,6 +4584,7 @@ std::optional<JSONFormat> JSONFormatFromString(const std::string& format) {
       {"glm_xml", JSONFormat::kGlmXML},
       {"cohere_xml", JSONFormat::kCohereXML},
       {"kimi_k3_xml", JSONFormat::kKimiK3XML},
+      {"gemma", JSONFormat::kGemma},
   };
   auto it = kNameToFormat.find(format);
   if (it == kNameToFormat.end()) {
@@ -4662,6 +4663,17 @@ Grammar JSONSchemaToGrammar(
     }
     case JSONFormat::kCohereXML: {
       CohereXMLToolCallingConverter converter(
+          indent,
+          std::move(separators),
+          any_whitespace,
+          max_whitespace_cnt,
+          std::move(ref_resolver),
+          any_order
+      );
+      return converter.Convert(spec);
+    }
+    case JSONFormat::kGemma: {
+      GemmaToolCallingConverter converter(
           indent,
           std::move(separators),
           any_whitespace,
@@ -4762,6 +4774,12 @@ std::string JSONSchemaToEBNF(
     }
     case JSONFormat::kCohereXML: {
       CohereXMLToolCallingConverter converter(
+          indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver, any_order
+      );
+      return GrammarNormalizer::Apply(converter.Convert(spec)).ToString();
+    }
+    case JSONFormat::kGemma: {
+      GemmaToolCallingConverter converter(
           indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver, any_order
       );
       return GrammarNormalizer::Apply(converter.Convert(spec)).ToString();

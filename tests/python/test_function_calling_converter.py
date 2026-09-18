@@ -64,6 +64,12 @@ def _check_cohere_grammar(schema: dict, instance: str, accepted: bool):
     check_grammar_with_instance(ebnf_grammar, instance, accepted)
 
 
+def _check_gemma_grammar(schema: dict, instance: str, accepted: bool):
+    check_grammar_with_instance(
+        _json_schema_to_ebnf(schema, json_format="gemma"), instance, accepted
+    )
+
+
 test_string_schema_input_str_accepted = (
     ("<parameter=name>Bob</parameter><parameter=age>\t100\n</parameter>", True),
     ("<parameter=name>Bob</parameter>\t\n<parameter=age>\t100\n</parameter>", True),
@@ -3866,6 +3872,15 @@ def test_cohere_recursive_root_reference_keeps_tagged_values():
         output.replace('<cofl:value name="name" type="raw">leaf</cofl:value>', '{"name":"leaf"}'),
         False,
     )
+
+
+gemma_integer_property_input_str_accepted = (('{"n":1}', True), ('{"n":"1"}', False))
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_integer_property_input_str_accepted)
+def test_gemma_integer_property(input_str: str, accepted: bool):
+    schema = {"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}
+    _check_gemma_grammar(schema, input_str, accepted)
 
 
 if __name__ == "__main__":

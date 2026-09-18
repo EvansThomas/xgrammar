@@ -294,6 +294,25 @@ class CohereXMLToolCallingConverter : public XMLToolCallingConverter {
   int cohere_array_level_ = 0;
 };
 
+/*!
+ * \brief Converter for Gemma tool call arguments.
+ *
+ * At every nesting level objects use bare keys ({key:value}), strings are delimited by
+ * <|"|> instead of the double quote and carry no escape sequences, and numbers, booleans,
+ * null, arrays and objects keep their JSON syntax.
+ */
+class GemmaToolCallingConverter : public JSONSchemaConverter {
+ public:
+  GemmaToolCallingConverter(
+      std::optional<int> indent,
+      std::optional<std::pair<std::string, std::string>> separators,
+      bool any_whitespace,
+      std::optional<int> max_whitespace_cnt,
+      RefResolver ref_resolver = nullptr,
+      bool any_order = false
+  );
+};
+
 namespace converter_ext {
 
 XMLWrapper GetQwenXMLWrapper();
