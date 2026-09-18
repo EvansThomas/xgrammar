@@ -17,6 +17,7 @@ from xgrammar.builtin_structural_tag import (
     get_deepseek_v3_2_structural_tag,
     get_deepseek_v4_1_structural_tag,
     get_deepseek_v4_structural_tag,
+    get_gemma_4_structural_tag,
     get_glm_4_7_structural_tag,
     get_harmony_structural_tag,
     get_kimi_k3_structural_tag,
@@ -1379,6 +1380,7 @@ def test_qwen_reasoning_suffix_stays_inside_the_optional_prefix(model: str):
         get_minimax_structural_tag,
         get_glm_4_7_structural_tag,
         get_cohere_structural_tag,
+        get_gemma_4_structural_tag,
     ],
 )
 @pytest.mark.parametrize(
@@ -1514,6 +1516,19 @@ def test_gemma_4_forced_tool_choice_pins_the_named_tool():
     )
     check_stag_with_instance(structural_tag, _GEMMA_4_WEATHER_CALL, True)
     check_stag_with_instance(structural_tag, _GEMMA_4_TIME_CALL, False)
+
+
+def test_gemma_4_tool_without_parameters_still_requires_braces():
+    """A tool with no schema keeps its braces: without them the name absorbs the block."""
+
+    structural_tag = get_model_structural_tag(
+        "gemma_4",
+        tools=[{"function": {"name": "ping", "parameters": None}}],
+        tool_choice="required",
+        reasoning="disabled",
+    )
+    check_stag_with_instance(structural_tag, "<|tool_call>call:ping{}<tool_call|>", True)
+    check_stag_with_instance(structural_tag, "<|tool_call>call:ping5<tool_call|>", False)
 
 
 def test_gemma_4_reasoning_channel_blocks_tool_calls():
@@ -2638,6 +2653,7 @@ _ANY_ORDER_MODELS = [
     "glm_4_7",
     "harmony",
     "exaone",
+    "gemma_4",
 ]
 
 

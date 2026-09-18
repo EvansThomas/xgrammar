@@ -343,7 +343,7 @@ class GemmaToolCallingConverter : public JSONSchemaConverter {
 
   // Replaces the JSON double quote around strings.
   static const std::string kGemmaStringDelim;
-  // Rule matching any text that does not contain the string delimiter.
+  // Rule matching any text that contains neither the string delimiter nor a tool-call marker.
   static const std::string kGemmaStringContent;
   // Rule matching a bare property key.
   static const std::string kGemmaVariableName;

@@ -2361,27 +2361,33 @@ def get_gemma_4_structural_tag(
     # call must not start there.
     REASONING_EXCLUDE_TOKENS = TEXT_EXCLUDE_TOKENS + [TOOL_CALL_TRIGGER]
 
+    def _make_call_tag(function: FunctionDefinition) -> TagFormat:
+        # <|tool_call>call:NAME{arguments}<tool_call|>
+        parameters = _get_function_parameters(function)
+        if not isinstance(parameters, dict) or parameters.get("type") != "object":
+            # In gemma style the braces are part of the argument grammar, so a schema
+            # that constrains nothing also admits a brace-less block, which the parser
+            # reads as a longer tool name with no arguments. Supply the braces here.
+            return TagFormat(
+                begin=f"{TOOL_CALL_BEGIN_PREFIX}{function.name}{{",
+                content=AnyTextFormat(excludes=[TOOL_CALL_TRIGGER, TOOL_CALL_END]),
+                end=f"}}{TOOL_CALL_END}",
+            )
+        return TagFormat(
+            begin=TOOL_CALL_BEGIN_PREFIX + function.name,
+            content=JSONSchemaFormat(
+                json_schema=parameters,
+                style=GEMMA_STYLE,
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end=TOOL_CALL_END,
+        )
+
     tools = tools or []
     builtin_tools = builtin_tools or []
     if tool_choice == "auto":
-        tags = []
-        for tool in tools:
-            function = tool.function
-            parameters = _get_function_parameters(function)
-            name = function.name
-            tags.append(
-                TagFormat(
-                    begin=TOOL_CALL_BEGIN_PREFIX + name,
-                    content=JSONSchemaFormat(
-                        json_schema=parameters,
-                        style=GEMMA_STYLE,
-                        any_order=any_order,
-                        max_whitespace_cnt=max_whitespace_cnt,
-                    ),
-                    end=TOOL_CALL_END,
-                )
-            )
-
+        tags = [_make_call_tag(tool.function) for tool in tools]
         if len(tags) > 0:
             suffix_tag = TriggeredTagsFormat(
                 triggers=[TOOL_CALL_TRIGGER],
@@ -2397,36 +2403,10 @@ def get_gemma_4_structural_tag(
     elif tool_choice == "forced":
         if not tools:
             raise ValueError("Forced tool choice must resolve to exactly one tool.")
-        function = tools[0].function
-        suffix_tag = TagFormat(
-            begin=TOOL_CALL_BEGIN_PREFIX + function.name,
-            content=JSONSchemaFormat(
-                json_schema=_get_function_parameters(function),
-                style=GEMMA_STYLE,
-                any_order=any_order,
-                max_whitespace_cnt=max_whitespace_cnt,
-            ),
-            end=TOOL_CALL_END,
-        )
+        suffix_tag = _make_call_tag(tools[0].function)
 
     elif tool_choice == "required":
-        tags = []
-        for tool in tools:
-            function = tool.function
-            parameters = _get_function_parameters(function)
-            name = function.name
-            tags.append(
-                TagFormat(
-                    begin=TOOL_CALL_BEGIN_PREFIX + name,
-                    content=JSONSchemaFormat(
-                        json_schema=parameters,
-                        style=GEMMA_STYLE,
-                        any_order=any_order,
-                        max_whitespace_cnt=max_whitespace_cnt,
-                    ),
-                    end=TOOL_CALL_END,
-                )
-            )
+        tags = [_make_call_tag(tool.function) for tool in tools]
         assert len(tags) > 0
         suffix_tag = TriggeredTagsFormat(
             triggers=[TOOL_CALL_TRIGGER],

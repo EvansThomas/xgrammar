@@ -59,7 +59,8 @@ class JSONSchemaFormat(BaseModel):
 
     - False (default): properties follow the schema's declared order, fully validated (required
       keys present, no duplicates). ``style="gemma"`` orders them the way the chat template's
-      ``dictsort`` does (case-insensitive by key) instead.
+      ``dictsort`` does (case-insensitive by key) instead, and accepts keys admitted by
+      ``additionalProperties`` only after the declared ones.
     - True: properties may appear in any order; only key validity and each key's value schema are
       enforced. Key presence and uniqueness are not checked, so required keys may be missing and
       keys may repeat. The entry count is bounded to ``[max(minProperties, n_required),
