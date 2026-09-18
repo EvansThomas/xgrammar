@@ -211,8 +211,11 @@ int32_t GemmaToolCallingConverter::GetKeyPatternExcluding(
 int32_t GemmaToolCallingConverter::GenerateLiteral(const picojson::value& value) {
   if (value.is<std::string>()) {
     const std::string& text = value.get<std::string>();
-    XGRAMMAR_CHECK(text.find(kGemmaStringDelim) == std::string::npos)
-        << "A gemma string literal cannot contain the string delimiter";
+    XGRAMMAR_CHECK(
+        text.find(kGemmaStringDelim) == std::string::npos &&
+        text.find("<|tool_call>") == std::string::npos &&
+        text.find("<tool_call|>") == std::string::npos
+    ) << "A gemma string literal cannot contain the string delimiter or a tool-call marker";
     return ByteString(kGemmaStringDelim + text + kGemmaStringDelim);
   }
   if (value.is<picojson::object>()) {

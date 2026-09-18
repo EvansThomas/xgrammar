@@ -4309,5 +4309,21 @@ def test_gemma_const_string_containing_delimiter_rejected():
         _json_schema_to_ebnf(schema, json_format="gemma")
 
 
+def test_gemma_const_string_containing_tool_call_marker_rejected():
+    schema = {"type": "object", "properties": {"k": {"const": "<tool_call|>"}}, "required": ["k"]}
+    with pytest.raises(RuntimeError, match="or a tool-call marker"):
+        _json_schema_to_ebnf(schema, json_format="gemma")
+
+
+def test_gemma_enum_string_containing_tool_call_marker_rejected():
+    schema = {
+        "type": "object",
+        "properties": {"k": {"enum": ["ok", "<|tool_call>"]}},
+        "required": ["k"],
+    }
+    with pytest.raises(RuntimeError, match="or a tool-call marker"):
+        _json_schema_to_ebnf(schema, json_format="gemma")
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

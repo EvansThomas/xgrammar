@@ -1577,7 +1577,14 @@ def test_gemma_4_single_token_delimiter_walk():
     rejected = _get_masked_tokens_from_bitmask(bitmask, len(vocab))
     assert set(range(len(vocab))) - set(rejected) == {vocab.index("ty")}
 
-    walk("ty", ":", '<|"|>', "Seoul", '<|"|>', "}", "<tool_call|>", "<eos>")
+    walk("ty", ":", '<|"|>')
+    # Either marker inside the string body would desync every downstream parser.
+    matcher.fill_next_token_bitmask(bitmask)
+    rejected = _get_masked_tokens_from_bitmask(bitmask, len(vocab))
+    assert vocab.index("<|tool_call>") in rejected
+    assert vocab.index("<tool_call|>") in rejected
+
+    walk("Seoul", '<|"|>', "}", "<tool_call|>", "<eos>")
     assert matcher.is_terminated()
 
 
