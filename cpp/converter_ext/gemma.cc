@@ -17,6 +17,33 @@ namespace xgrammar {
 
 namespace {
 
+// Identifier characters, minus the ones a child branch of the key trie already consumes. The
+// first character of a key cannot be a digit, so the caller decides whether digits are allowed.
+template <typename Children>
+std::vector<GrammarBuilder::CharacterClassElement> IdentifierRangesExcluding(
+    const Children& children, bool allow_digits
+) {
+  auto allowed = [&](int32_t character) {
+    bool is_identifier_character = (character >= 'a' && character <= 'z') ||
+                                   (character >= 'A' && character <= 'Z') || character == '_' ||
+                                   (allow_digits && character >= '0' && character <= '9');
+    return is_identifier_character && children.count(static_cast<uint8_t>(character)) == 0;
+  };
+
+  std::vector<GrammarBuilder::CharacterClassElement> ranges;
+  for (int32_t character = '0'; character <= 'z'; ++character) {
+    if (!allowed(character)) {
+      continue;
+    }
+    int32_t range_start = character;
+    while (character + 1 <= 'z' && allowed(character + 1)) {
+      ++character;
+    }
+    ranges.push_back({range_start, character});
+  }
+  return ranges;
+}
+
 std::string ToLowerASCII(const std::string& text) {
   std::string lowered = text;
   std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char byte) {
@@ -83,6 +110,16 @@ int32_t GemmaToolCallingConverter::GenerateString(
   return Sequence({delimiter, RuleRef(kGemmaStringContent), delimiter});
 }
 
+int32_t GemmaToolCallingConverter::GenerateObject(
+    const ObjectSpec& spec, const std::string& rule_name, bool need_brace
+) {
+  // patternProperties and propertyNames route their keys through GenerateString, which would
+  // emit them delimited rather than bare.
+  XGRAMMAR_CHECK(spec.pattern_properties.empty() && spec.property_names == nullptr)
+      << "gemma style does not support patternProperties/propertyNames";
+  return JSONSchemaConverter::GenerateObject(spec, rule_name, need_brace);
+}
+
 int32_t GemmaToolCallingConverter::FormatPropertyKey(
     const std::string& key, const SchemaSpecPtr& schema
 ) {
@@ -90,6 +127,47 @@ int32_t GemmaToolCallingConverter::FormatPropertyKey(
 }
 
 std::string GemmaToolCallingConverter::GetKeyPattern() const { return kGemmaVariableName; }
+
+int32_t GemmaToolCallingConverter::BuildBareKeyTrieBody(const BareKeyTrieNode& node, int depth) {
+  std::vector<int32_t> choices;
+  // A prefix that is not itself a declared name is a complete key on its own.
+  if (depth > 0 && !node.is_terminal) {
+    choices.push_back(Empty());
+  }
+  // Any character the trie does not branch on ends the exclusion: the rest is a free identifier.
+  choices.push_back(Sequence(
+      {builder_.AddCharacterClass(IdentifierRangesExcluding(node.children, depth > 0)),
+       builder_.AddCharacterClassStar({{'a', 'z'}, {'A', 'Z'}, {'0', '9'}, {'_', '_'}})}
+  ));
+  for (const auto& [character, child] : node.children) {
+    choices.push_back(Sequence(
+        {ByteString(std::string(1, static_cast<char>(character))),
+         BuildBareKeyTrieBody(child, depth + 1)}
+    ));
+  }
+  return Choice(choices);
+}
+
+int32_t GemmaToolCallingConverter::GetKeyPatternExcluding(
+    const std::vector<ObjectSpec::Property>& properties, const std::string& rule_name
+) {
+  if (properties.empty()) {
+    return KeyPatternExpression();
+  }
+
+  BareKeyTrieNode root;
+  for (const auto& property : properties) {
+    BareKeyTrieNode* current = &root;
+    for (unsigned char character : property.name) {
+      current = &current->children[character];
+    }
+    current->is_terminal = true;
+  }
+
+  int32_t key_rule_id = builder_.AddEmptyRuleWithHint(rule_name + "_addl_key");
+  builder_.UpdateRuleBody(key_rule_id, BuildBareKeyTrieBody(root, 0));
+  return RuleRef(key_rule_id);
+}
 
 int32_t GemmaToolCallingConverter::GenerateLiteral(const picojson::value& value) {
   if (value.is<std::string>()) {

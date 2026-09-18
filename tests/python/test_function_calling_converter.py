@@ -4004,7 +4004,12 @@ def test_gemma_empty_object(input_str: str, accepted: bool):
 
 gemma_additional_properties_input_str_accepted = (
     ('{foo:<|"|>x<|"|>}', True),
+    ("{}", True),
+    ('{foo:1,bar:<|"|>x<|"|>,baz:{nested:[true,null]}}', True),
     ('{"foo":"x"}', False),
+    ('{"foo":1}', False),
+    ("{1foo:1}", False),
+    ('{foo:"x"}', False),
 )
 
 
@@ -4071,6 +4076,62 @@ def test_gemma_const_key_order(input_str: str, accepted: bool):
     # dictsort compares lowercased keys, so "a" precedes "B" despite the byte order.
     schema = {"type": "object", "properties": {"o": {"const": {"B": 1, "a": 2}}}, "required": ["o"]}
     _check_gemma_grammar(schema, input_str, accepted)
+
+
+gemma_declared_and_additional_schema = {
+    "type": "object",
+    "properties": {"lines": {"type": "array", "items": {"type": "string"}}},
+    "required": ["lines"],
+    "additionalProperties": True,
+}
+
+gemma_declared_and_additional_input_str_accepted = (
+    ('{lines:[<|"|>a<|"|>],extra:1}', True),
+    ('{lines:[<|"|>a<|"|>],lines2:1}', True),
+    ('{lines:[<|"|>a<|"|>],lin:1}', True),
+    ('{lines:[<|"|>a<|"|>],_x:<|"|>y<|"|>}', True),
+    ('{lines:[<|"|>a<|"|>],lines:1}', False),
+    ("{extra:1}", False),
+    ('{lines:[<|"|>a<|"|>],"extra":1}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_declared_and_additional_input_str_accepted)
+def test_gemma_declared_and_additional_properties(input_str: str, accepted: bool):
+    _check_gemma_grammar(gemma_declared_and_additional_schema, input_str, accepted)
+
+
+gemma_shared_prefix_key_schema = {
+    "type": "object",
+    "properties": {"id": {"type": "integer"}, "identity": {"type": "integer"}},
+    "required": ["id", "identity"],
+    "additionalProperties": True,
+}
+
+gemma_shared_prefix_key_input_str_accepted = (
+    ("{id:1,identity:2,ident:3}", True),
+    ("{id:1,identity:2,identity2:3}", True),
+    ("{id:1,identity:2,i:3}", True),
+    ("{id:1,identity:2,id:3}", False),
+    ("{id:1,identity:2,identity:3}", False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_shared_prefix_key_input_str_accepted)
+def test_gemma_shared_prefix_additional_key(input_str: str, accepted: bool):
+    _check_gemma_grammar(gemma_shared_prefix_key_schema, input_str, accepted)
+
+
+def test_gemma_pattern_properties_rejected():
+    schema = {"type": "object", "patternProperties": {"^x": {"type": "integer"}}}
+    with pytest.raises(RuntimeError, match="does not support patternProperties"):
+        _json_schema_to_ebnf(schema, json_format="gemma")
+
+
+def test_gemma_property_names_rejected():
+    schema = {"type": "object", "propertyNames": {"pattern": "^x"}, "additionalProperties": True}
+    with pytest.raises(RuntimeError, match="does not support patternProperties"):
+        _json_schema_to_ebnf(schema, json_format="gemma")
 
 
 def test_gemma_const_string_containing_delimiter_rejected():
