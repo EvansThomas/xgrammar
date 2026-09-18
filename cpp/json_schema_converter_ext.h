@@ -311,6 +311,22 @@ class GemmaToolCallingConverter : public JSONSchemaConverter {
       RefResolver ref_resolver = nullptr,
       bool any_order = false
   );
+
+ protected:
+  int32_t GenerateString(const StringSpec& spec, const std::string& rule_name) override;
+
+  int32_t FormatPropertyKey(const std::string& key, const SchemaSpecPtr& schema) override;
+  std::string GetKeyPattern() const override;
+
+  void AddBasicRules() override;
+
+ private:
+  // Replaces the JSON double quote around strings.
+  static const std::string kGemmaStringDelim;
+  // Rule matching any text that does not contain the string delimiter.
+  static const std::string kGemmaStringContent;
+  // Rule matching a bare property key.
+  static const std::string kGemmaVariableName;
 };
 
 namespace converter_ext {

@@ -3874,12 +3874,39 @@ def test_cohere_recursive_root_reference_keeps_tagged_values():
     )
 
 
-gemma_integer_property_input_str_accepted = (('{"n":1}', True), ('{"n":"1"}', False))
+gemma_integer_property_input_str_accepted = (
+    ("{n:1}", True),
+    ('{n:"1"}', False),
+    ('{"n":1}', False),
+)
 
 
 @pytest.mark.parametrize("input_str, accepted", gemma_integer_property_input_str_accepted)
 def test_gemma_integer_property(input_str: str, accepted: bool):
     schema = {"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
+gemma_string_property_input_str_accepted = (
+    ('{q:<|"|>hello<|"|>}', True),
+    ('{q:<|"|><|"|>}', True),
+    # No escape sequences: JSON metacharacters and newlines are ordinary content.
+    ('{q:<|"|>a{b}c,d:"e"\n<|"|>}', True),
+    # Prefixes of the delimiter are ordinary content too.
+    ('{q:<|"|>a < b <| c <|" d <|"| e<|"|>}', True),
+    ('{ q : <|"|>x<|"|> }', True),
+    # The delimiter ends the string, so it cannot appear inside the content.
+    ('{q:<|"|>a<|"|>b<|"|>}', False),
+    ('{q:"hello"}', False),
+    ('{"q":<|"|>x<|"|>}', False),
+    ('{q:<|"|>x<|"|>', False),
+    ("{q:hello}", False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_string_property_input_str_accepted)
+def test_gemma_string_property(input_str: str, accepted: bool):
+    schema = {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}
     _check_gemma_grammar(schema, input_str, accepted)
 
 
