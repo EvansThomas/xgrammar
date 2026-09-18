@@ -137,8 +137,9 @@ int32_t GemmaToolCallingConverter::GenerateObject(
 ) {
   // patternProperties and propertyNames route their keys through GenerateString, which would
   // emit them delimited rather than bare.
-  XGRAMMAR_CHECK(spec.pattern_properties.empty() && spec.property_names == nullptr)
-      << "gemma style does not support patternProperties/propertyNames";
+  XGRAMMAR_CHECK(spec.pattern_properties.empty())
+      << "gemma style does not support patternProperties";
+  XGRAMMAR_CHECK(spec.property_names == nullptr) << "gemma style does not support propertyNames";
   return JSONSchemaConverter::GenerateObject(spec, rule_name, need_brace);
 }
 
@@ -213,6 +214,8 @@ int32_t GemmaToolCallingConverter::GenerateLiteral(const picojson::value& value)
       if (index != 0) {
         elements.push_back(ByteString(","));
       }
+      XGRAMMAR_CHECK(IsIdentifier(keys[index]))
+          << "A gemma property key must be an identifier: " << keys[index];
       elements.push_back(ByteString(keys[index] + ":"));
       elements.push_back(GenerateLiteral(object.at(keys[index])));
     }

@@ -4180,18 +4180,24 @@ def test_gemma_shared_prefix_additional_key(input_str: str, accepted: bool):
 
 def test_gemma_pattern_properties_rejected():
     schema = {"type": "object", "patternProperties": {"^x": {"type": "integer"}}}
-    with pytest.raises(RuntimeError, match="does not support patternProperties"):
+    with pytest.raises(RuntimeError, match="does not support patternProperties$"):
         _json_schema_to_ebnf(schema, json_format="gemma")
 
 
 def test_gemma_property_names_rejected():
     schema = {"type": "object", "propertyNames": {"pattern": "^x"}, "additionalProperties": True}
-    with pytest.raises(RuntimeError, match="does not support patternProperties"):
+    with pytest.raises(RuntimeError, match="does not support propertyNames"):
         _json_schema_to_ebnf(schema, json_format="gemma")
 
 
 def test_gemma_non_identifier_property_key_rejected():
     schema = {"type": "object", "properties": {"my key": {"type": "integer"}}}
+    with pytest.raises(RuntimeError, match="must be an identifier"):
+        _json_schema_to_ebnf(schema, json_format="gemma")
+
+
+def test_gemma_non_identifier_literal_key_rejected():
+    schema = {"type": "object", "properties": {"o": {"const": {"my key": 1}}}, "required": ["o"]}
     with pytest.raises(RuntimeError, match="must be an identifier"):
         _json_schema_to_ebnf(schema, json_format="gemma")
 
