@@ -640,6 +640,73 @@ def test_gemma_4_nested_tool_arguments_alignment():
 
 
 @pytest.mark.parametrize(
+    "properties, arguments, rendered_arguments",
+    (
+        pytest.param(
+            {"zeta": {"type": "string"}, "mid": {"type": "string"}, "alpha": {"type": "string"}},
+            {"zeta": "Z", "mid": "M", "alpha": "A"},
+            'alpha:<|"|>A<|"|>,mid:<|"|>M<|"|>,zeta:<|"|>Z<|"|>',
+            id="reordered",
+        ),
+        pytest.param(
+            {"Zeta": {"type": "string"}, "alpha": {"type": "string"}, "beta": {"type": "string"}},
+            {"Zeta": "Z", "alpha": "A", "beta": "B"},
+            'alpha:<|"|>A<|"|>,beta:<|"|>B<|"|>,Zeta:<|"|>Z<|"|>',
+            id="reordered-case-insensitive",
+        ),
+        pytest.param(
+            {
+                "config": {
+                    "type": "object",
+                    "properties": {"z": {"type": "string"}, "a": {"type": "string"}},
+                    "required": ["z", "a"],
+                }
+            },
+            {"config": {"z": "Z", "a": "A"}},
+            'config:{a:<|"|>A<|"|>,z:<|"|>Z<|"|>}',
+            id="reordered-nested",
+        ),
+        pytest.param(
+            {"query": {"type": "string"}},
+            {"query": 'find {x, y} "now"\nplease'},
+            'query:<|"|>find {x, y} "now"\nplease<|"|>',
+            id="punctuation-in-string",
+        ),
+    ),
+)
+def test_gemma_4_argument_rendering_alignment(properties, arguments, rendered_arguments):
+    """Gemma 4 renders arguments in dictsort order, and strings hold raw punctuation."""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "set_values",
+                "description": "Set values.",
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": list(properties),
+                },
+            },
+        }
+    ]
+    assistant_msg = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "type": "function",
+                "id": "call_0",
+                "function": {"name": "set_values", "arguments": arguments},
+            }
+        ],
+    }
+    model_output = extract_output_gemma4(assistant_msg, tools, {"enable_thinking": False})
+    assert model_output == f"<|tool_call>call:set_values{{{rendered_arguments}}}<tool_call|>"
+    validate_output("gemma_4", tools, "required", False, model_output)
+
+
+@pytest.mark.parametrize(
     "parameters, arguments, serialized_name",
     (
         pytest.param(
