@@ -3910,6 +3910,62 @@ def test_gemma_string_property(input_str: str, accepted: bool):
     _check_gemma_grammar(schema, input_str, accepted)
 
 
+gemma_bounded_string_input_str_accepted = (
+    ('{q:<|"|>ab<|"|>}', True),
+    ('{q:<|"|>abc<|"|>}', True),
+    ('{q:<|"|>a<b<|"|>}', True),
+    # The bound counts codepoints, not bytes.
+    ('{q:<|"|>äö<|"|>}', True),
+    ('{q:<|"|>a<|"|>}', False),
+    ('{q:<|"|>abcd<|"|>}', False),
+    ('{q:"ab"}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_bounded_string_input_str_accepted)
+def test_gemma_bounded_string(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {"q": {"type": "string", "minLength": 2, "maxLength": 3}},
+        "required": ["q"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
+gemma_pattern_string_input_str_accepted = (
+    ('{q:<|"|>abc<|"|>}', True),
+    ('{q:<|"|>ABC<|"|>}', False),
+    ('{q:<|"|><|"|>}', False),
+    ('{q:"abc"}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_pattern_string_input_str_accepted)
+def test_gemma_pattern_string(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {"q": {"type": "string", "pattern": "^[a-z]+$"}},
+        "required": ["q"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
+gemma_format_string_input_str_accepted = (
+    ('{q:<|"|>2026-09-18<|"|>}', True),
+    ('{q:<|"|>18/09/2026<|"|>}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_format_string_input_str_accepted)
+def test_gemma_format_string(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {"q": {"type": "string", "format": "date"}},
+        "required": ["q"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
 gemma_scalar_properties_input_str_accepted = (
     ("{n:1,f:2.5,b:true,z:null}", True),
     ("{n:-3,f:1e5,b:false,z:null}", True),

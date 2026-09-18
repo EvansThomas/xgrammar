@@ -103,16 +103,28 @@ int32_t GemmaToolCallingConverter::GenerateString(
     const StringSpec& spec, const std::string& rule_name
 ) {
   int32_t delimiter = ByteString(kGemmaStringDelim);
+  // A regex is matched against the raw content, so it is not JSON-escaped here. A pattern or
+  // format that can generate the delimiter text closes the string early; callers must keep
+  // patterns restrictive.
   if (spec.format.has_value()) {
     auto regex = JSONFormatToRegexPattern(*spec.format);
     if (regex.has_value()) {
-      return Sequence({delimiter, RegexExpression(*regex, false, true), delimiter});
+      // The built-in format regexes use constructs that the FSM regex engine does not fully
+      // support yet (e.g. quoted email local parts), so they keep the CFG expansion.
+      return Sequence(
+          {delimiter,
+           RegexExpression(*regex, /*json_string=*/false, /*force_cfg_expansion=*/true),
+           delimiter}
+      );
     }
   }
   if (spec.pattern.has_value()) {
     return Sequence({delimiter, RegexExpression(*spec.pattern, /*json_string=*/false), delimiter});
   }
   if (spec.min_length != 0 || spec.max_length != -1) {
+    // The counted characters are not restricted to exclude the delimiter text: the parser stops
+    // at the first delimiter, so a bounded string that reaches it just ends there. The effect is
+    // an extra parse, never a lost one - JSON style is loose in the same way.
     int32_t character = builder_.AddCharacterClass({{0, 0x10FFFF}});
     int32_t body = Repeat(rule_name + "_characters", character, spec.min_length, spec.max_length);
     return Sequence({delimiter, body, delimiter});
