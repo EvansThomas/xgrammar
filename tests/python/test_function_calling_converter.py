@@ -3910,5 +3910,132 @@ def test_gemma_string_property(input_str: str, accepted: bool):
     _check_gemma_grammar(schema, input_str, accepted)
 
 
+gemma_scalar_properties_input_str_accepted = (
+    ("{n:1,f:2.5,b:true,z:null}", True),
+    ("{n:-3,f:1e5,b:false,z:null}", True),
+    ("{n:1.5,f:2.5,b:true,z:null}", False),
+    ('{n:1,f:2.5,b:<|"|>true<|"|>,z:null}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_scalar_properties_input_str_accepted)
+def test_gemma_scalar_properties(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {
+            "n": {"type": "integer"},
+            "f": {"type": "number"},
+            "b": {"type": "boolean"},
+            "z": {"type": "null"},
+        },
+        "required": ["n", "f", "b", "z"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
+gemma_nested_properties_input_str_accepted = (
+    ('{o:{k:<|"|>v<|"|>},a:[<|"|>x<|"|>,<|"|>y<|"|>],objs:[{id:1},{id:2}]}', True),
+    ('{o:{k:<|"|>v<|"|>},a:[],objs:[]}', True),
+    # Bare keys and delimited strings apply at every nesting level.
+    ('{o:{"k":<|"|>v<|"|>},a:[],objs:[]}', False),
+    ('{o:{k:"v"},a:[],objs:[]}', False),
+    ('{o:{k:<|"|>v<|"|>},a:[<|"|>x<|"|>],objs:[{id:<|"|>1<|"|>}]}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_nested_properties_input_str_accepted)
+def test_gemma_nested_properties(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {
+            "o": {"type": "object", "properties": {"k": {"type": "string"}}, "required": ["k"]},
+            "a": {"type": "array", "items": {"type": "string"}},
+            "objs": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"id": {"type": "integer"}},
+                    "required": ["id"],
+                },
+            },
+        },
+        "required": ["o", "a", "objs"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
+gemma_optional_property_schema = {
+    "type": "object",
+    "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+    "required": ["a"],
+}
+
+gemma_optional_property_input_str_accepted = (
+    ('{a:<|"|>x<|"|>}', True),
+    ('{a:<|"|>x<|"|>,b:2}', True),
+    ("{b:2}", False),
+    ("{}", False),
+    ('{a:<|"|>x<|"|>,b:2,b:3}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_optional_property_input_str_accepted)
+def test_gemma_optional_property(input_str: str, accepted: bool):
+    _check_gemma_grammar(gemma_optional_property_schema, input_str, accepted)
+
+
+def test_gemma_property_order():
+    out_of_order = '{b:2,a:<|"|>x<|"|>}'
+    _check_gemma_grammar(gemma_optional_property_schema, out_of_order, False)
+    check_grammar_with_instance(
+        _json_schema_to_ebnf(gemma_optional_property_schema, json_format="gemma", any_order=True),
+        out_of_order,
+        True,
+    )
+
+
+gemma_empty_object_input_str_accepted = (("{}", True), ("{ }", True), ("{a:1}", False))
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_empty_object_input_str_accepted)
+def test_gemma_empty_object(input_str: str, accepted: bool):
+    _check_gemma_grammar({"type": "object", "properties": {}}, input_str, accepted)
+
+
+gemma_additional_properties_input_str_accepted = (
+    ('{foo:<|"|>x<|"|>}', True),
+    ('{"foo":"x"}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_additional_properties_input_str_accepted)
+def test_gemma_additional_properties(input_str: str, accepted: bool):
+    # additionalProperties routes values through basic_any, so this pins the basic_string
+    # rule-id overwrite reaching the inherited basic rules.
+    _check_gemma_grammar({"type": "object", "additionalProperties": True}, input_str, accepted)
+
+
+gemma_render_speech_input_str_accepted = (
+    ('{lines:[<|"|>Hi there<|"|>]}', True),
+    ('{lines:[<|"|>Hi<|"|>,<|"|>there<|"|>]}', True),
+    ("{lines:[]}", False),
+    ('{lines:[<|"|>a<|"|>,<|"|>b<|"|>,<|"|>c<|"|>]}', False),
+    ('{lines:{lines:[<|"|>x<|"|>]}}', False),
+    ('{"lines":["Hi"]}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_render_speech_input_str_accepted)
+def test_gemma_render_speech(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {
+            "lines": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2}
+        },
+        "required": ["lines"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)
