@@ -317,10 +317,15 @@ class GemmaToolCallingConverter : public JSONSchemaConverter {
 
   int32_t FormatPropertyKey(const std::string& key, const SchemaSpecPtr& schema) override;
   std::string GetKeyPattern() const override;
+  int32_t GenerateConst(const ConstSpec& spec, const std::string& rule_name) override;
+  int32_t GenerateEnum(const EnumSpec& spec, const std::string& rule_name) override;
 
   void AddBasicRules() override;
 
  private:
+  // Emits a fixed JSON value in gemma syntax: delimited strings, bare and sorted object keys.
+  int32_t GenerateLiteral(const picojson::value& value);
+
   // Replaces the JSON double quote around strings.
   static const std::string kGemmaStringDelim;
   // Rule matching any text that does not contain the string delimiter.

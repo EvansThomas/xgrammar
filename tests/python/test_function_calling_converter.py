@@ -4037,5 +4037,31 @@ def test_gemma_render_speech(input_str: str, accepted: bool):
     _check_gemma_grammar(schema, input_str, accepted)
 
 
+gemma_literal_input_str_accepted = (
+    ('{mode:<|"|>fast<|"|>,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', True),
+    ('{mode:3,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', True),
+    ('{mode:null,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', True),
+    ('{mode:"fast",k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
+    ('{mode:<|"|>medium<|"|>,k:<|"|>v<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
+    ('{mode:<|"|>fast<|"|>,k:<|"|>w<|"|>,o:{s:<|"|>t<|"|>,x:1}}', False),
+    # The chat template renders mappings with dictsort, so an object literal is key-sorted.
+    ('{mode:<|"|>fast<|"|>,k:<|"|>v<|"|>,o:{x:1,s:<|"|>t<|"|>}}', False),
+)
+
+
+@pytest.mark.parametrize("input_str, accepted", gemma_literal_input_str_accepted)
+def test_gemma_const_and_enum(input_str: str, accepted: bool):
+    schema = {
+        "type": "object",
+        "properties": {
+            "mode": {"enum": ["fast", "slow", 3, None]},
+            "k": {"const": "v"},
+            "o": {"const": {"x": 1, "s": "t"}},
+        },
+        "required": ["mode", "k", "o"],
+    }
+    _check_gemma_grammar(schema, input_str, accepted)
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)
